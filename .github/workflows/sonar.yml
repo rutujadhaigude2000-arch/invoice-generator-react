@@ -1,25 +1,27 @@
-name: SonarCloud Analysis
+name: Build, Test, and Analyze with SonarCloud
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
     branches:
-      - main   # Only run when a PR targets main
+      - master
 
 jobs:
   build:
-    name: Build & Analyze
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Needed for SonarCloud PR analysis
+          fetch-depth: 0  # required for SonarCloud PR analysis
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '18'   # Or the version your project uses
+          node-version: '18'
 
       - name: Install dependencies
         run: npm install
@@ -27,9 +29,15 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests
 
+      - name: Upload coverage to artifacts (optional)
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage
+
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        uses: SonarSource/sonarcloud-github-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # Needed for PR checks
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
