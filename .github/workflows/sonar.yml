@@ -9,34 +9,44 @@ on:
       - master
 
 jobs:
-  build-and-scan:
+  sonarcloud:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout code
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests with coverage
+      # 4️⃣ Run tests with coverage
+      - name: Run Jest tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests
 
-      - name: SonarCloud Scan
+      # 5️⃣ Create SonarCloud config file
+      - name: Prepare sonar-project.properties
+        run: |
+          echo "sonar.organization=your-sonarcloud-org" >> sonar-project.properties
+          echo "sonar.projectKey=invoice-generator-react" >> sonar-project.properties
+          echo "sonar.projectName=Invoice Generator React" >> sonar-project.properties
+          echo "sonar.sources=src" >> sonar-project.properties
+          echo "sonar.language=js" >> sonar-project.properties
+          echo "sonar.sourceEncoding=UTF-8" >> sonar-project.properties
+          echo "sonar.javascript.lcov.reportPaths=coverage/lcov.info" >> sonar-project.properties
+
+      # 6️⃣ Run SonarCloud Scan
+      - name: Run SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
-          args: >
-            -Dsonar.organization=your-sonarcloud-org
-            -Dsonar.projectKey=invoice-generator-react
-            -Dsonar.projectName="Invoice Generator React"
-            -Dsonar.sources=src
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+          entryPoint: '.'   # Points to repo root where sonar-project.properties exists
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
 
