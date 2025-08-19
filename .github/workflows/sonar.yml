@@ -1,25 +1,24 @@
-name: Build, Test, and Analyze with SonarCloud
+name: SonarCloud Scan
 
 on:
   push:
     branches:
-      - master
+      - master    # change to 'main' if your repo uses main
   pull_request:
     branches:
       - master
 
 jobs:
-  build:
+  sonarcloud:
+    name: SonarCloud
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # required for SonarCloud PR analysis
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
@@ -29,16 +28,22 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests
 
-      # OPTIONAL: Upload coverage artifacts, if needed
-      - name: Upload coverage report (optional)
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage
-
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # required for PR decoration
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # you must add this in repo → Settings → Secrets → Actions
+        with:
+          args: >
+            -Dsonar.projectKey=RADhaigude_invoice-generator-react
+            -Dsonar.organization=radhaigude
+            -Dsonar.sources=src
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+
+      - name: SonarCloud Quality Gate
+        uses: SonarSource/sonarcloud-quality-gate-action@master
+        timeout-minutes: 5
+        env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
