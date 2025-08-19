@@ -29,14 +29,15 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests
 
-      - name: Upload coverage to artifacts (optional)
-        uses: actions/upload-artifact@v3
+      # OPTIONAL: Upload coverage artifacts, if needed
+      - name: Upload coverage report (optional)
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarcloud-github-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
