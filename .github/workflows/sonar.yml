@@ -30,12 +30,7 @@ jobs:
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
-          args: >
-            -Dsonar.organization=radhaigude
-            -Dsonar.projectKey=radhaigude_invoice-generator-react
-            -Dsonar.projectName=InvoiceGeneratorReact
-            -Dsonar.sources=src
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+          entryPoint: '.'   # points to repo root where sonar-project.properties exists
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
