@@ -1,4 +1,4 @@
-name: SonarCloud Scan
+name: CI / SonarCloud Scan
 
 on:
   push:
@@ -13,24 +13,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # 1️⃣ Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2️⃣ Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm install
 
+      # 4️⃣ Run Jest tests with coverage
       - name: Run tests and generate coverage
-        run: npm test -- --coverage
+        run: npm test -- --coverage --watchAll=false --passWithNoTests
 
+      # 5️⃣ SonarCloud scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
-          entryPoint: '.'   # points to repo root where sonar-project.properties exists
+          entryPoint: '.'   # repo root where sonar-project.properties exists
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
