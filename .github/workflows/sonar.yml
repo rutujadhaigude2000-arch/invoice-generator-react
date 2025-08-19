@@ -11,6 +11,7 @@ on:
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -29,9 +30,13 @@ jobs:
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
-          organization: your-sonarcloud-org
-          projectKey: invoice-generator-react
-          projectName: Invoice Generator React
+          args: >
+            -Dsonar.organization=your-sonarcloud-org
+            -Dsonar.projectKey=invoice-generator-react
+            -Dsonar.projectName="Invoice Generator React"
+            -Dsonar.sources=src
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
