@@ -1,26 +1,24 @@
-name: SonarCloud Scan
+name: CI / SonarCloud Scan
 
 on:
   push:
     branches:
-      - master    # change to 'main' if your repo uses main
+      - master
   pull_request:
     branches:
       - master
 
 jobs:
-  sonarcloud:
-    name: SonarCloud
+  build-and-scan:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: 18
 
       - name: Install dependencies
         run: npm install
@@ -30,20 +28,10 @@ jobs:
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # required for PR decoration
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # you must add this in repo → Settings → Secrets → Actions
         with:
-          args: >
-            -Dsonar.projectKey=RADhaigude_invoice-generator-react
-            -Dsonar.organization=radhaigude
-            -Dsonar.sources=src
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-
-      - name: SonarCloud Quality Gate
-        uses: SonarSource/sonarcloud-quality-gate-action@master
-        timeout-minutes: 5
+          organization: your-sonarcloud-org
+          projectKey: invoice-generator-react
+          projectName: Invoice Generator React
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
 
