@@ -1,25 +1,22 @@
-name: CI / SonarCloud Scan
+name: SonarCloud PR Analysis
 
 on:
-  push:
-    branches:
-      - master
   pull_request:
     branches:
       - master
 
 jobs:
   sonarcloud:
+    name: SonarCloud Scan
     runs-on: ubuntu-latest
-
     steps:
       # 1️⃣ Checkout code
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js
+      # 2️⃣ Set up Node.js (or your project language)
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '18'
 
@@ -27,15 +24,27 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Run Jest tests with coverage
-      - name: Run tests and generate coverage
-        run: npm test -- --coverage --watchAll=false --passWithNoTests
+      # 4️⃣ Introduce failing code (optional for testing)
+      - name: Add failing test code
+        run: |
+          echo "function badCode(){ return undefinedVar + 1 }" >> bad.js
+          echo "module.exports = badCode;" >> bad.js
 
-      # 5️⃣ SonarCloud scan
+      # 5️⃣ Run tests with coverage (low coverage triggers Quality Gate fail)
+      - name: Run tests
+        run: npm test -- --coverage || true
+
+      # 6️⃣ SonarCloud Scan
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        uses: SonarSource/sonarcloud-github-action@master
         with:
-          entryPoint: '.'   # repo root where sonar-project.properties exists
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
+          projectKey: RADhaigude-failing-project
+          organization: RADhaigude
+          token: ${{ secrets.SONAR_TOKEN }}
+
+      # 7️⃣ Fail PR if Quality Gate fails
+      - name: Check Quality Gate
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=true
