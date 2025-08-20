@@ -12,11 +12,11 @@ jobs:
     steps:
       # 1️⃣ Checkout code
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2️⃣ Set up Node.js (or your project language)
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
@@ -24,27 +24,24 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Introduce failing code (optional for testing)
+      # 4️⃣ Add intentionally failing code for Quality Gate
       - name: Add failing test code
         run: |
           echo "function badCode(){ return undefinedVar + 1 }" >> bad.js
           echo "module.exports = badCode;" >> bad.js
 
-      # 5️⃣ Run tests with coverage (low coverage triggers Quality Gate fail)
+      # 5️⃣ Run tests with coverage (to trigger fail on low coverage)
       - name: Run tests
         run: npm test -- --coverage || true
 
       # 6️⃣ SonarCloud Scan
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        with:
-          projectKey: RADhaigude-failing-project
-          organization: RADhaigude
-          token: ${{ secrets.SONAR_TOKEN }}
-
-      # 7️⃣ Fail PR if Quality Gate fails
-      - name: Check Quality Gate
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
+            -Dsonar.projectKey=RADhaigude-failing-project
+            -Dsonar.organization=RADhaigude
+            -Dsonar.sources=.
             -Dsonar.qualitygate.wait=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
