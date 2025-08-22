@@ -6,7 +6,7 @@ on:
       - main   # Run on main branch
   pull_request:
     branches:
-      - master  # Run on PRs to master
+      - qa  # Run on PRs to master
 
 jobs:
   sonarcloud:
