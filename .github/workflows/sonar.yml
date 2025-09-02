@@ -14,24 +14,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout the repo
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Set up Node.js (React project)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
+      # 3️⃣ Install project dependencies
       - name: Install dependencies
         run: npm ci
 
+      # 4️⃣ Run SonarCloud analysis
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Must be set in GitHub Secrets
           SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
+            -X  # Optional: debug logs
