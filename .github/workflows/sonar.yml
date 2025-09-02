@@ -3,37 +3,33 @@ name: SonarCloud Scan
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - qa
+      - master
 
 jobs:
   sonarcloud:
-    name: SonarCloud Scan
+    name: SonarCloud
     runs-on: ubuntu-latest
+
     steps:
-      # 1️⃣ Checkout code
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Node.js (if your project uses Node)
+      # Set up Node.js (since your project is React)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ Run SonarCloud Scan
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-            -Dsonar.host.url=https://sonarcloud.io
-            -Dsonar.qualitygate.wait=true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-
