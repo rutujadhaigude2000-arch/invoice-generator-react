@@ -1,4 +1,4 @@
-name: SonarCloud Analysis (Invoice Generator)
+name: SonarCloud Scan Only
 
 on:
   push:
@@ -10,37 +10,20 @@ on:
 
 jobs:
   sonarcloud:
-    name: SonarCloud Scan & Report
+    name: SonarCloud Scan
     runs-on: ubuntu-latest
     steps:
       # 1️⃣ Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Node.js
+      # 2️⃣ Set up Node.js (if your project requires Node)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ Install dependencies
-      - name: Install dependencies
-        run: npm install
-
-      # 4️⃣ Optional: Add failing demo code (exclude in analysis)
-      - name: Add failing demo code
-        run: |
-          echo "function uncoveredFunc(){ return 42 }" >> fail.js
-          echo "function anotherUncovered(){ return uncoveredVar + 1 }" >> fail.js
-          echo "function dupFunc() { return 1; }" >> fail.js
-          echo "function dupFunc() { return 1; }" >> fail.js
-          echo "module.exports = {uncoveredFunc, anotherUncovered, dupFunc};" >> fail.js
-
-      # 5️⃣ Run tests with coverage
-      - name: Run tests
-        run: npm test -- --coverage || true
-
-      # 6️⃣ Run SonarCloud Scan
+      # 3️⃣ Run SonarCloud Scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
@@ -48,35 +31,7 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-            -Dsonar.exclusions=fail.js
-            -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.qualitygate.wait=true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # 7️⃣ Fetch Quality Gate status
-      - name: Get Quality Gate Status
-        run: |
-          curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
-            -o qualitygate.json
-
-      # 8️⃣ Convert JSON to HTML report
-      - name: Generate HTML Report
-        run: |
-          node -e "
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('qualitygate.json'));
-            const html = `<h1>SonarCloud Quality Gate Status: ${data.projectStatus.status}</h1>
-                          <ul>${data.projectStatus.conditions.map(c => `<li>${c.metric}: ${c.status} (${c.value}${c.errorThreshold ? ' / threshold ' + c.errorThreshold : ''})</li>`).join('')}</ul>`;
-            fs.writeFileSync('qualitygate.html', html);
-          "
-
-      # 9️⃣ Upload JSON and HTML reports
-      - name: Upload Reports
-        uses: actions/upload-artifact@v3
-        with:
-          name: SonarCloud-Reports
-          path: |
-            qualitygate.json
-            qualitygate.html
