@@ -1,3 +1,4 @@
+
 name: SonarCloud Scan
 
 on:
@@ -31,13 +32,13 @@ jobs:
       # 4️⃣ Run SonarCloud analysis
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2.1.0
-
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # Must be set in GitHub Secrets
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # GitHub secret
           SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-            -X  # Optional: debug logs
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+            -X
