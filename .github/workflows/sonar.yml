@@ -1,4 +1,4 @@
-name: SonarCloud Analysis (Failing Quality Gate)
+name: SonarCloud Analysis (Invoice Generator)
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
     name: SonarCloud Scan & Report
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -45,8 +45,8 @@ jobs:
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
-            -Dsonar.projectKey=RADhaigude-failing-project
-            -Dsonar.organization=RADhaigude
+            -Dsonar.projectKey=RADhaigude_invoice-generator-react
+            -Dsonar.organization=radhaigude
             -Dsonar.sources=.
             -Dsonar.exclusions=fail.js
             -Dsonar.qualitygate.wait=true
@@ -57,7 +57,7 @@ jobs:
       - name: Get Quality Gate Status
         run: |
           curl -u ${{ secrets.SONAR_TOKEN }}: \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude-failing-project" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
             -o qualitygate.json
 
       # 8️⃣ Convert JSON to HTML report
