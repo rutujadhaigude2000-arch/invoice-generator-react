@@ -1,4 +1,4 @@
-name: SonarCloud Scan Only
+name: SonarCloud Scan
 
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Node.js (if your project requires Node)
+      # 2️⃣ Set up Node.js (if your project uses Node)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -31,7 +31,9 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
+            -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.qualitygate.wait=true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
