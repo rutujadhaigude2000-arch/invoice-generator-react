@@ -13,7 +13,7 @@ jobs:
     name: SonarCloud Scan & Report
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Add intentionally failing code (optional, for demo)
-      - name: Add failing test code
+      # 4️⃣ Optional: Add failing demo code (exclude in analysis)
+      - name: Add failing demo code
         run: |
           echo "function uncoveredFunc(){ return 42 }" >> fail.js
           echo "function anotherUncovered(){ return uncoveredVar + 1 }" >> fail.js
@@ -49,14 +49,15 @@ jobs:
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
             -Dsonar.exclusions=fail.js
+            -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.qualitygate.wait=true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # 7️⃣ Fetch Quality Gate status via API
+      # 7️⃣ Fetch Quality Gate status
       - name: Get Quality Gate Status
         run: |
-          curl -u ${{ secrets.SONAR_TOKEN }}: \
+          curl -s -u ${{ secrets.SONAR_TOKEN }}: \
             "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
             -o qualitygate.json
 
@@ -71,7 +72,7 @@ jobs:
             fs.writeFileSync('qualitygate.html', html);
           "
 
-      # 9️⃣ Upload JSON and HTML reports as artifacts
+      # 9️⃣ Upload JSON and HTML reports
       - name: Upload Reports
         uses: actions/upload-artifact@v3
         with:
@@ -79,4 +80,3 @@ jobs:
           path: |
             qualitygate.json
             qualitygate.html
-
