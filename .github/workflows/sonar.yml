@@ -40,5 +40,3 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-            -X
