@@ -29,14 +29,4 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Run SonarCloud scan
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2.1.0
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: "https://sonarcloud.io"
-        with:
-          args: >
-            -Dsonar.projectKey=RADhaigude_invoice-generator-react
-            -Dsonar.organization=radhaigude
-            -Dsonar.sources=.
+      
