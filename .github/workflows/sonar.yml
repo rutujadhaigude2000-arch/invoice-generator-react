@@ -1,4 +1,3 @@
-
 name: SonarCloud Scan
 
 on:
@@ -12,28 +11,29 @@ on:
 jobs:
   sonarcloud:
     name: SonarCloud Scan
+    environment: dev
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout the repo
+      # 1️⃣ Checkout repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Node.js (React project)
+      # 2️⃣ Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ Install project dependencies
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Run SonarCloud analysis
+      # 4️⃣ Run SonarCloud scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2.1.0
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}   # GitHub secret
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
