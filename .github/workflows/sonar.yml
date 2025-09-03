@@ -1,57 +1,35 @@
-name: SonarCloud Scan
-
 on:
   push:
     branches:
       - dev
+      - master
   pull_request:
     branches:
       - dev
+      - master
 
 jobs:
   sonarcloud:
-    name: SonarCloud Scan
-    environment: dev
+    name: SonarCloud
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js
+      # Set up Node.js (since your project is React)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ Install dependencies
-      - name: Install dependencies
-        run: npm ci
-
-      # 4️⃣ SonarCloud Scan
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
+        uses: SonarSource/sonarcloud-github-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: "https://sonarcloud.io"
         with:
           args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-            -Dsonar.organization=${{ vars.SONAR_ORG }}
+            -Dsonar.projectKey=RADhaigude_invoice-generator-react
+            -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-
-      # 5️⃣ Generate Quality Gate report (JSON)
-      - name: Upload Quality Gate report
-        uses: actions/upload-artifact@v2
-        with:
-         name: sonar-quality-gate
-         path: sonar_quality_gate.json
-
-
-      # 6️⃣ Upload Quality Gate JSON as artifact
-      - name: Upload Quality Gate report
-        uses: actions/upload-artifact@v4
-        with:
-          name: sonar-quality-gate
-          path: sonar_quality_gate.json
-
