@@ -7,7 +7,7 @@ on:
       - master
   pull_request:
     branches:
-      - master   # adjust if you also want PRs into dev
+      - master
 
 jobs:
   sonarcloud:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js (React project)
+      # 2️⃣ Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,12 +28,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Run tests + coverage (don’t fail pipeline if no tests)
+      # 4️⃣ Run tests + coverage
       - name: Run tests with coverage
         run: |
           npm test -- --coverage --watchAll=false --passWithNoTests || true
 
-      # 5️⃣ Build project (React + fix for Node 18)
+      # 5️⃣ Build project
       - name: Build project
         run: |
           CI=false npm run build --if-present
@@ -52,33 +52,56 @@ jobs:
             -Dsonar.sources=.
             ${{ github.event_name == 'pull_request' && format('-Dsonar.pullrequest.key={0} -Dsonar.pullrequest.branch={1} -Dsonar.pullrequest.base={2}', github.event.pull_request.number, github.head_ref, github.base_ref) || '' }}
 
-      # 7️⃣ Fetch Quality Gate JSON
-      - name: Fetch Quality Gate status
+      # 7️⃣ QUALITY GATES (This will now fail the build if Quality Gate fails)
+      - name: Quality Gates
         run: |
+          echo "Checking SonarCloud Quality Gate status..."
+          sleep 45
+          
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react&pullRequest=${{ github.event.pull_request.number }}" \
-              -o sonar_quality_gate.json
+            URL="https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react&pullRequest=${{ github.event.pull_request.number }}"
           else
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
-              -o sonar_quality_gate.json
+            URL="https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react"
           fi
-          cat sonar_quality_gate.json
+          
+          echo "Fetching Quality Gate status from: $URL"
+          response=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "$URL")
+          status=$(echo $response | jq -r '.projectStatus.status')
+          echo "Quality Gate Status: $status"
+          
+          echo $response > sonar_quality_gate.json
+          
+          # Check conditions and fail if any are ERROR
+          error_count=$(echo $response | jq -r '.projectStatus.conditions[] | select(.status == "ERROR") | .metricKey' | wc -l)
+          
+          if [ "$status" = "ERROR" ] || [ $error_count -gt 0 ]; then
+            echo "❌ QUALITY GATE FAILED!"
+            echo "Failed metrics:"
+            echo $response | jq -r '.projectStatus.conditions[] | select(.status == "ERROR") | "  - \(.metricKey): \(.actualValue) (threshold: \(.errorThreshold))"'
+            exit 1
+          elif [ "$status" = "OK" ]; then
+            echo "✅ Quality Gate passed successfully!"
+          else
+            echo "⚠️ Unknown Quality Gate status: $status"
+            exit 1
+          fi
 
-      # 8️⃣ Convert JSON to HTML
-      - name: Convert Quality Gate JSON to HTML
+      # 8️⃣ Generate HTML Report (optional)
+      - name: Generate HTML Report
         run: |
-          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
-          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
-          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+          echo "<html><head><title>SonarCloud Quality Gate</title><style>body{font-family:Arial,sans-serif;margin:40px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background-color:#f2f2f2}.error{color:red}.ok{color:green}.warn{color:orange}</style></head><body>" > sonar_quality_gate.html
+          status=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
+          echo "<h1>Quality Gate Status: <span class='$status'>$status</span></h1>" >> sonar_quality_gate.html
+          echo "<table><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+          
           jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
             METRIC=$(echo $row | jq -r '.metricKey')
             STATUS=$(echo $row | jq -r '.status')
             ACTUAL=$(echo $row | jq -r '.actualValue')
             THRESHOLD=$(echo $row | jq -r '.errorThreshold')
-            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
+            echo "<tr><td>$METRIC</td><td class='$STATUS'>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
           done
+          
           echo "</table></body></html>" >> sonar_quality_gate.html
 
       # 9️⃣ Upload artifacts
@@ -89,4 +112,3 @@ jobs:
           path: |
             sonar_quality_gate.json
             sonar_quality_gate.html
-
