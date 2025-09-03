@@ -29,4 +29,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          projectKey: RADhaigude_invoice-generator-react
+          organization: radhaigude
+          token: ${{ secrets.SONAR_TOKEN }}
+
+
+      # 5️⃣ Generate Quality Gate Report (Optional)
+      - name: Generate Quality Gate Report
+        run: |
+          curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=your-org_your-project" \
+            -o quality_gate.json
+          cat quality_gate.json
