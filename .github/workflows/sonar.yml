@@ -50,7 +50,7 @@ jobs:
 
       # 6️⃣ Upload Quality Gate JSON as artifact
       - name: Upload Quality Gate report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sonar-quality-gate
           path: sonar_quality_gate.json
