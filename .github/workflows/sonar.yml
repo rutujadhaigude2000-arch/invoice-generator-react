@@ -106,7 +106,7 @@ jobs:
 
       # 1️⃣1️⃣ Upload artifacts (JSON + HTML)
       - name: Upload Quality Gate artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sonar-quality-gate
           path: |
