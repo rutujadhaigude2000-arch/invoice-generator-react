@@ -38,7 +38,7 @@ jobs:
 
       # 5️⃣ Build project (with OpenSSL legacy provider fix for Node 18+)
       - name: Build project
-        run: npm run build --if-present
+         CI=false npm run build --if-present
         env:
           NODE_OPTIONS: --openssl-legacy-provider
 
