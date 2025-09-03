@@ -7,20 +7,20 @@ on:
       - master
   pull_request:
     branches:
-      - master   # ✅ Only trigger PR checks into master (adjust if needed)
+      - master
 
 jobs:
   sonarcloud:
-    name: SonarCloud
     runs-on: ubuntu-latest
+    name: SonarCloud Analysis
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout code
+      # 1️⃣ Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js (React project)
-      - name: Set up Node.js
+      # 2️⃣ Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -29,20 +29,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Run SonarCloud Scan
-      - name: SonarCloud Scan (push)
-        if: github.event_name == 'push'
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=RADhaigude_invoice-generator-react
-            -Dsonar.organization=radhaigude
-            -Dsonar.sources=.
+      # 4️⃣ Build project
+      - name: Build project
+        run: npm run build --if-present
 
-      - name: SonarCloud Scan (PR)
-        if: github.event_name == 'pull_request'
+      # 5️⃣ Run tests with coverage (for SonarCloud)
+      - name: Run tests
+        run: npm test -- --coverage --watchAll=false
+
+      # 6️⃣ SonarCloud Scan
+      - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -50,12 +46,13 @@ jobs:
           args: >
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
-            -Dsonar.sources=.
+            -Dsonar.sources=src
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-      # 5️⃣ Fetch Quality Gate JSON
+      # 7️⃣ Fetch Quality Gate JSON
       - name: Fetch Quality Gate status
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -69,31 +66,5 @@ jobs:
           fi
           cat sonar_quality_gate.json
 
-      # 6️⃣ Convert JSON to HTML
-      - name: Convert Quality Gate JSON to HTML
-        run: |
-          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
-          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
-          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
-          jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
-            METRIC=$(echo $row | jq -r '.metricKey')
-            STATUS=$(echo $row | jq -r '.status')
-            ACTUAL=$(echo $row | jq -r '.actualValue')
-            THRESHOLD=$(echo $row | jq -r '.errorThreshold')
-            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
-          done
-          echo "</table></body></html>" >> sonar_quality_gate.html
+      # 8️⃣ Con
 
-      # 7️⃣ Upload JSON Artifact
-      - name: Upload JSON Quality Gate
-        uses: actions/upload-artifact@v4
-        with:
-          name: sonar-quality-gate-json
-          path: sonar_quality_gate.json
-
-      # 8️⃣ Upload HTML Artifact
-      - name: Upload HTML Quality Gate
-        uses: actions/upload-artifact@v4
-        with:
-          name: sonar-quality-gate-html
-          path: sonar_quality_gate.html
