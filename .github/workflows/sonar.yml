@@ -1,3 +1,4 @@
+
 name: CI / SonarCloud Scan
 
 on:
@@ -50,7 +51,6 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
-
       # 7️⃣ SonarCloud Scan for pull requests
       - name: SonarCloud Scan (PR)
         if: github.event_name == 'pull_request'
@@ -65,7 +65,6 @@ jobs:
             -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
-
       # 8️⃣ Fetch Quality Gate JSON from SonarCloud
       - name: Fetch Quality Gate status
         run: |
@@ -79,7 +78,6 @@ jobs:
               -o sonar_quality_gate.json
           fi
           cat sonar_quality_gate.json
-
       # 9️⃣ Convert Quality Gate JSON to HTML
       - name: Convert Quality Gate JSON to HTML
         run: |
@@ -94,7 +92,6 @@ jobs:
             echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
           done
           echo "</table></body></html>" >> sonar_quality_gate.html
-
       # 🔟 Upload artifacts (JSON + HTML)
       - name: Upload Quality Gate artifacts
         uses: actions/upload-artifact@v4
