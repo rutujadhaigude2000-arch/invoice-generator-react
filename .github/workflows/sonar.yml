@@ -36,11 +36,13 @@ jobs:
 
         
 
-      # 5️⃣ Build project (with OpenSSL legacy provider fix for Node 18+)
+      #       # 5️⃣ Build project (with OpenSSL legacy provider fix for Node 18+)
       - name: Build project
-         CI=false npm run build --if-present
+        run: |
+          CI=false npm run build --if-present
         env:
           NODE_OPTIONS: --openssl-legacy-provider
+
 
       # 6️⃣ Run SonarCloud Scan (push)
       - name: SonarCloud Scan (push)
