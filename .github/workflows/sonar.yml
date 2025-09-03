@@ -42,19 +42,30 @@ jobs:
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
 
-      # 5️⃣ Fetch Quality Gate JSON
-      - name: Fetch Quality Gate status
+      # 5️⃣ Fetch New Code Quality Gate JSON
+      - name: Fetch New Code Quality Gate status
         run: |
           curl -s -u ${{ secrets.SONAR_TOKEN }}: \
             "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
             -o sonar_quality_gate.json
           cat sonar_quality_gate.json
 
-      # 6️⃣ Convert JSON to HTML
-      - name: Convert Quality Gate JSON to HTML
+      # 6️⃣ Fetch Overall Metrics JSON
+      - name: Fetch Overall Project Metrics
+        run: |
+          curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+            "https://sonarcloud.io/api/measures/component?component=RADhaigude_invoice-generator-react&metricKeys=reliability_rating,security_rating,maintainability_rating,coverage,duplicated_lines_density,sqale_index,security_hotspots_reviewed" \
+            -o sonar_overall_metrics.json
+          cat sonar_overall_metrics.json
+
+      # 7️⃣ Convert JSON to HTML (New Code + Overall)
+      - name: Convert SonarCloud JSON to HTML
         run: |
           echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
           echo "<h1>SonarCloud Scan - Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
+
+          # --- New Code Metrics Table ---
+          echo "<h2>New Code Metrics</h2>" >> sonar_quality_gate.html
           echo "<table border='1' cellpadding='5' cellspacing='0'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
           jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
             METRIC=$(echo $row | jq -r '.metricKey')
@@ -63,16 +74,26 @@ jobs:
             THRESHOLD=$(echo $row | jq -r '.errorThreshold')
             echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
           done
-          echo "</table></body></html>" >> sonar_quality_gate.html
+          echo "</table>" >> sonar_quality_gate.html
 
-      # 7️⃣ Upload JSON Artifact
-      - name: Upload JSON Quality Gate
+          # --- Overall Metrics Table ---
+          echo "<h2>Overall Metrics</h2>" >> sonar_quality_gate.html
+          echo "<table border='1' cellpadding='5' cellspacing='0'><tr><th>Metric</th><th>Value</th></tr>" >> sonar_quality_gate.html
+          jq -r '.component.measures[] | "<tr><td>\(.metric)</td><td>\(.value)</td></tr>"' sonar_overall_metrics.json >> sonar_quality_gate.html
+          echo "</table>" >> sonar_quality_gate.html
+
+          echo "</body></html>" >> sonar_quality_gate.html
+
+      # 8️⃣ Upload JSON Artifacts
+      - name: Upload JSON Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sonar-quality-gate-json
-          path: sonar_quality_gate.json
+          path: |
+            sonar_quality_gate.json
+            sonar_overall_metrics.json
 
-      # 8️⃣ Upload HTML Artifact
+      # 9️⃣ Upload HTML Artifact
       - name: Upload HTML Quality Gate
         uses: actions/upload-artifact@v4
         with:
