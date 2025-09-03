@@ -3,10 +3,11 @@ name: SonarCloud Scan
 on:
   push:
     branches:
+      - dev
       - master
   pull_request:
     branches:
-      - master
+      - master   # ✅ Only trigger PR checks into master (adjust if needed)
 
 jobs:
   sonarcloud:
@@ -28,9 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Run SonarCloud Scan (push/PR)
+      # 4️⃣ Run SonarCloud Scan
       - name: SonarCloud Scan (push)
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push'
         uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -96,4 +97,3 @@ jobs:
         with:
           name: sonar-quality-gate-html
           path: sonar_quality_gate.html
-
