@@ -16,17 +16,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up Node.js
+      # 2️⃣ Setup Node.js (React project)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ SonarCloud Scan
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4️⃣ Run SonarCloud Scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -38,7 +42,7 @@ jobs:
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
 
-      # 4️⃣ Fetch Quality Gate status
+      # 5️⃣ Fetch Quality Gate JSON
       - name: Fetch Quality Gate status
         run: |
           curl -s -u ${{ secrets.SONAR_TOKEN }}: \
@@ -46,9 +50,32 @@ jobs:
             -o sonar_quality_gate.json
           cat sonar_quality_gate.json
 
-      # 5️⃣ Upload Quality Gate report as artifact
-      - name: Upload Quality Gate report
+      # 6️⃣ Convert JSON to HTML
+      - name: Convert Quality Gate JSON to HTML
+        run: |
+          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
+          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
+          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+          jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
+            METRIC=$(echo $row | jq -r '.metricKey')
+            STATUS=$(echo $row | jq -r '.status')
+            ACTUAL=$(echo $row | jq -r '.actualValue')
+            THRESHOLD=$(echo $row | jq -r '.errorThreshold')
+            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
+          done
+          echo "</table></body></html>" >> sonar_quality_gate.html
+
+      # 7️⃣ Upload JSON Artifact
+      - name: Upload JSON Quality Gate
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-quality-gate
+          name: sonar-quality-gate-json
           path: sonar_quality_gate.json
+
+      # 8️⃣ Upload HTML Artifact
+      - name: Upload HTML Quality Gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-quality-gate-html
+          path: sonar_quality_gate.html
+
