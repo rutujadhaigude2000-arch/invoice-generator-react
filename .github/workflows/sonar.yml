@@ -20,7 +20,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js (React project)
+      # 2️⃣ Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -32,7 +32,7 @@ jobs:
 
       # 4️⃣ Run SonarCloud Scan
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: "https://sonarcloud.io"
@@ -54,8 +54,8 @@ jobs:
       - name: Convert Quality Gate JSON to HTML
         run: |
           echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
-          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
-          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+          echo "<h1>SonarCloud Scan - Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
+          echo "<table border='1' cellpadding='5' cellspacing='0'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
           jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
             METRIC=$(echo $row | jq -r '.metricKey')
             STATUS=$(echo $row | jq -r '.status')
