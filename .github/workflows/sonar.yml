@@ -41,12 +41,12 @@ jobs:
             -Dsonar.sources=.
 
       # 5️⃣ Generate Quality Gate report (JSON)
-      - name: Fetch Quality Gate status
-        run: |
-          curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=${{ vars.SONAR_PROJECT_KEY }}" \
-            -o sonar_quality_gate.json
-          cat sonar_quality_gate.json
+      - name: Upload Quality Gate report
+        uses: actions/upload-artifact@v2
+        with:
+         name: sonar-quality-gate
+         path: sonar_quality_gate.json
+
 
       # 6️⃣ Upload Quality Gate JSON as artifact
       - name: Upload Quality Gate report
