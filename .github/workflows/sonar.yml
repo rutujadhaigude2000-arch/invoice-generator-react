@@ -3,6 +3,8 @@ name: CI / SonarCloud Scan
 on:
   push:
     branches: [ dev, master ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: read
@@ -22,19 +24,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Tooling (Node + jq + pandoc)
+      # 2️⃣ Set up Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
+      # 3️⃣ Install OS tooling
       - name: Install OS tooling
         run: |
           sudo apt-get update
           sudo apt-get install -y jq pandoc
           pandoc --version
 
-      # 3️⃣ Cache Node modules
+      # 4️⃣ Cache Node modules
       - name: Cache Node modules
         uses: actions/cache@v4
         with:
@@ -43,11 +46,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      # 4️⃣ Install dependencies
+      # 5️⃣ Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 5️⃣ Run tests with coverage
+      # 6️⃣ Run tests with coverage
       - name: Run tests with coverage
         run: |
           npm install --save-dev jest-canvas-mock
@@ -56,13 +59,11 @@ jobs:
             --json --outputFile=jest-results.json \
             --coverageReporters=text --coverageReporters=lcov --coverageReporters=html || echo "⚠️ Some tests failed, but continuing..."
 
-      # 6️⃣ Generate test coverage report
+      # 7️⃣ Generate test coverage report
       - name: Generate test coverage report
         run: |
           mkdir -p reports/sonar/coverage
-          if [ -d coverage/lcov-report ]; then
-            cp -r coverage/lcov-report/* reports/sonar/coverage/
-          fi
+          cp -r coverage/lcov-report/* reports/sonar/coverage/ 2>/dev/null || true
           echo "# Test Coverage Summary" > reports/sonar/coverage/SUMMARY.md
           echo "Generated on: $(date)" >> reports/sonar/coverage/SUMMARY.md
           echo "## Coverage Metrics" >> reports/sonar/coverage/SUMMARY.md
@@ -75,13 +76,13 @@ jobs:
             echo "| Branches | $(jq -r '.total.branches.pct' coverage/coverage-summary.json)% |" >> reports/sonar/coverage/SUMMARY.md
           fi
 
-      # 7️⃣ Build project
+      # 8️⃣ Build project
       - name: Build project
         run: CI=false npm run build --if-present
         env:
           NODE_OPTIONS: --openssl-legacy-provider
 
-      # 8️⃣ SonarCloud Scan for pushes
+      # 9️⃣ SonarCloud Scan for pushes
       - name: SonarCloud Scan
         if: github.event_name == 'push'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -89,7 +90,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=radhaigude_RADhaigude_invoice-generator-react
+            -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
             -Dsonar.exclusions=node_modules/**,coverage/**,build/**,dist/**,**/*.spec.ts,**/*.spec.tsx,**/*.test.ts,**/*.test.tsx,**/*.test.js
@@ -101,9 +102,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           curl -s -u "$SONAR_TOKEN:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=radhaigude_RADhaigude_invoice-generator-react" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
             -o sonar_quality_gate.json
-          echo "✅ Fetched Quality Gate JSON"
           cat sonar_quality_gate.json
 
       # 1️⃣1️⃣ Convert Quality Gate JSON to HTML
@@ -123,14 +123,14 @@ jobs:
             echo "</table></body></html>" >> sonar_quality_gate.html
           fi
 
-      # 1️⃣2️⃣ Generate multi-format Sonar reports
+      # 1️⃣2️⃣ Generate multi-format Sonar reports (fixed Python block)
       - name: Generate SonarCloud Reports
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install requests openpyxl python-docx pypandoc lxml
-          python3 <<'EOF'
+          cat > sonar_report.py << 'PY'
 import requests, csv, os, base64, sys
 from openpyxl import Workbook
 from docx import Document
@@ -142,7 +142,7 @@ except OSError:
     pypandoc.download_pandoc()
 
 token = os.getenv("SONAR_TOKEN")
-project = "radhaigude_RADhaigude_invoice-generator-react"
+project = "RADhaigude_invoice-generator-react"
 metrics = ",".join([
     "bugs","vulnerabilities","code_smells",
     "coverage","duplicated_lines_density",
@@ -152,7 +152,6 @@ metrics = ",".join([
 url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
 headers = {"Authorization": "Basic " + base64.b64encode(f"{token}:".encode()).decode()}
 r = requests.get(url, headers=headers)
-print(r.json())  # <-- Debug API output
 if r.status_code != 200 or "component" not in r.json():
     print("❌ API call failed or no measures found")
     sys.exit(1)
@@ -195,7 +194,8 @@ with open("sonar_report.md","w") as f:
 # RTF
 pypandoc.convert_text(md_content,'rtf',format='md',outputfile='sonar_report_quality.rtf',extra_args=['--standalone'])
 print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
-EOF
+PY
+          python3 sonar_report.py || echo "⚠️ Report generation failed, but continuing..."
 
       # 1️⃣3️⃣ Upload comprehensive reports
       - name: Upload comprehensive reports
@@ -217,4 +217,3 @@ EOF
             sonar_report_quality.rtf
             build/**
           retention-days: 7
-
