@@ -7,7 +7,7 @@ on:
       - master
   pull_request:
     branches:
-      - master
+      - master   # Only trigger PR checks into master (adjust if needed)
 
 jobs:
   sonarcloud:
@@ -48,7 +48,7 @@ jobs:
         env:
           NODE_OPTIONS: --openssl-legacy-provider
 
-      # 7️⃣ SonarCloud Scan (Push)
+      # 7️⃣ SonarCloud Scan for push
       - name: SonarCloud Scan (push)
         if: github.event_name == 'push'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -60,7 +60,7 @@ jobs:
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
 
-      # 8️⃣ SonarCloud Scan (PR)
+      # 8️⃣ SonarCloud Scan for pull requests
       - name: SonarCloud Scan (PR)
         if: github.event_name == 'pull_request'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -75,22 +75,47 @@ jobs:
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-      # 9️⃣ Setup Python
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+      # 9️⃣ Fetch Quality Gate JSON from SonarCloud
+      - name: Fetch Quality Gate status
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react&pullRequest=${{ github.event.pull_request.number }}" \
+              -o sonar_quality_gate.json
+          else
+            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
+              -o sonar_quality_gate.json
+          fi
+          cat sonar_quality_gate.json
 
-      # 🔟 Install Python dependencies
+      # 🔟 Convert Quality Gate JSON to HTML
+      - name: Convert Quality Gate JSON to HTML
+        run: |
+          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
+          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
+          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+          jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
+            METRIC=$(echo $row | jq -r '.metricKey')
+            STATUS=$(echo $row | jq -r '.status')
+            ACTUAL=$(echo $row | jq -r '.actualValue')
+            THRESHOLD=$(echo $row | jq -r '.errorThreshold')
+            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
+          done
+          echo "</table></body></html>" >> sonar_quality_gate.html
+
+      # 1️⃣1️⃣ Install Python dependencies for reports
       - name: Install Python dependencies
         run: |
-          pip install requests openpyxl python-docx pypandoc
+          pip install requests openpyxl python-docx pypandoc lxml
 
-      # 1️⃣1️⃣ Generate Multi-format Reports
+      # 1️⃣2️⃣ Generate Multi-format Reports
       - name: Generate SonarCloud Reports
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cat > sonar_report.py <<'EOF'
-          import requests, csv, os
+          import requests, csv, os, base64
           from openpyxl import Workbook
           from docx import Document
           import pypandoc
@@ -100,10 +125,12 @@ jobs:
           metrics = "bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density"
           url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
 
-          r = requests.get(url, auth=(token, ""))
+          headers = {"Authorization": "Basic " + base64.b64encode(f"{token}:".encode()).decode()}
+          r = requests.get(url, headers=headers)
           if r.status_code != 200:
               print("❌ API call failed:", r.status_code, r.text)
               exit(1)
+
           data = r.json()["component"]["measures"]
 
           # CSV
@@ -139,19 +166,21 @@ jobs:
           with open("sonar_report.md", "w") as f:
               f.write(md_content)
 
-          # Convert MD -> RTF (quality config style)
+          # RTF
           pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
 
           print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
           EOF
           python sonar_report.py
 
-      # 1️⃣2️⃣ Upload artifacts
+      # 1️⃣3️⃣ Upload artifacts (all reports)
       - name: Upload SonarCloud Reports
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-reports
+          name: sonarcloud-reports
           path: |
+            sonar_quality_gate.json
+            sonar_quality_gate.html
             sonar_report.csv
             sonar_report.xlsx
             sonar_report.docx
