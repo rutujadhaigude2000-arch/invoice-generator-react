@@ -37,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 5️⃣ Run tests with coverage (pipeline continues even if no tests)
+      # 5️⃣ Run tests with coverage
       - name: Run tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests || true
 
@@ -48,7 +48,7 @@ jobs:
         env:
           NODE_OPTIONS: --openssl-legacy-provider
 
-      # 7️⃣ SonarCloud Scan for push events
+      # 7️⃣ SonarCloud Scan (Push)
       - name: SonarCloud Scan (push)
         if: github.event_name == 'push'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -60,7 +60,7 @@ jobs:
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
 
-      # 8️⃣ SonarCloud Scan for pull requests
+      # 8️⃣ SonarCloud Scan (PR)
       - name: SonarCloud Scan (PR)
         if: github.event_name == 'pull_request'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -75,39 +75,86 @@ jobs:
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-      # 9️⃣ Install Python for report generation
+      # 9️⃣ Setup Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # 🔟 Generate SonarCloud Report (CSV)
-      - name: Generate SonarCloud Report
+      # 🔟 Install Python dependencies
+      - name: Install Python dependencies
         run: |
-          pip install requests
+          pip install requests openpyxl python-docx pypandoc
+
+      # 1️⃣1️⃣ Generate Multi-format Reports
+      - name: Generate SonarCloud Reports
+        run: |
           cat > sonar_report.py <<'EOF'
           import requests, csv, os
+          from openpyxl import Workbook
+          from docx import Document
+          import pypandoc
 
           token = os.getenv("SONAR_TOKEN")
           project = "RADhaigude_invoice-generator-react"
-          url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density"
+          metrics = "bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density"
+          url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
 
           r = requests.get(url, auth=(token, ""))
+          if r.status_code != 200:
+              print("❌ API call failed:", r.status_code, r.text)
+              exit(1)
           data = r.json()["component"]["measures"]
 
+          # CSV
           with open("sonar_report.csv", "w", newline="") as f:
               writer = csv.writer(f)
               writer.writerow(["Metric", "Value"])
               for m in data:
                   writer.writerow([m["metric"], m["value"]])
-          print("✅ Report saved as sonar_report.csv")
+
+          # XLSX
+          wb = Workbook()
+          ws = wb.active
+          ws.append(["Metric", "Value"])
+          for m in data:
+              ws.append([m["metric"], m["value"]])
+          wb.save("sonar_report.xlsx")
+
+          # DOCX
+          doc = Document()
+          doc.add_heading("SonarCloud Report", 0)
+          table = doc.add_table(rows=1, cols=2)
+          hdr = table.rows[0].cells
+          hdr[0].text, hdr[1].text = "Metric", "Value"
+          for m in data:
+              row = table.add_row().cells
+              row[0].text, row[1].text = m["metric"], m["value"]
+          doc.save("sonar_report.docx")
+
+          # Markdown
+          md_content = "# SonarCloud Report\n\n| Metric | Value |\n|--------|-------|\n"
+          for m in data:
+              md_content += f"| {m['metric']} | {m['value']} |\n"
+          with open("sonar_report.md", "w") as f:
+              f.write(md_content)
+
+          # Convert MD -> RTF (quality config style)
+          pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
+
+          print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
           EOF
           python sonar_report.py
 
-      # 1️⃣1️⃣ Upload SonarCloud Report artifact
-      - name: Upload SonarCloud Report
+      # 1️⃣2️⃣ Upload artifacts
+      - name: Upload SonarCloud Reports
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-report
-          path: sonar_report.csv
+          name: sonar-reports
+          path: |
+            sonar_report.csv
+            sonar_report.xlsx
+            sonar_report.docx
+            sonar_report.md
+            sonar_report_quality.rtf
 
