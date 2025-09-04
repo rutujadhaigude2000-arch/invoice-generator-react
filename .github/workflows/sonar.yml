@@ -2,29 +2,40 @@ name: CI / SonarCloud Scan
 
 on:
   push:
-    branches:
-      - dev
-      - master
+    branches: [ dev, master ]
   pull_request:
-    branches:
-      - master   # Only trigger PR checks into master (adjust if needed)
+    branches: [ master ]  # adjust if you also want PRs into dev
+
+permissions:
+  contents: read
+  pull-requests: write   # needed so Sonar can decorate PRs / add comments
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  sonarcloud:
+  build-test-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js
+      # 2️⃣ Tooling (Node + jq + pandoc)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 3️⃣ Cache Node.js dependencies
+      - name: Install OS tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq pandoc
+
+      # 3️⃣ Cache Node modules
       - name: Cache Node modules
         uses: actions/cache@v4
         with:
@@ -37,18 +48,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 5️⃣ Run tests with coverage
+      # 5️⃣ Run tests with coverage (Jest) – fail pipeline if tests fail
       - name: Run tests with coverage
-        run: npm test -- --coverage --watchAll=false --passWithNoTests || true
-
-      # 6️⃣ Build project
-      - name: Build project
         run: |
-          CI=false npm run build --if-present
+          npm test -- --coverage --watchAll=false --passWithNoTests --json --outputFile=jest-results.json
+
+      # 6️⃣ Build project (non-blocking CI var for CRA builds)
+      - name: Build project
+        run: CI=false npm run build --if-present
         env:
           NODE_OPTIONS: --openssl-legacy-provider
 
-      # 7️⃣ SonarCloud Scan for push
+      # 7️⃣ SonarCloud Scan for pushes (includes coverage)
       - name: SonarCloud Scan (push)
         if: github.event_name == 'push'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -59,8 +70,10 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
+            -Dsonar.exclusions=node_modules/**,coverage/**,build/**,dist/**,**/*.spec.ts,**/*.spec.tsx,**/*.test.ts,**/*.test.tsx,**/*.test.js
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
 
-      # 8️⃣ SonarCloud Scan for pull requests
+      # 8️⃣ SonarCloud Scan for PRs (decorates PRs)
       - name: SonarCloud Scan (PR)
         if: github.event_name == 'pull_request'
         uses: SonarSource/sonarcloud-github-action@v2
@@ -71,68 +84,71 @@ jobs:
             -Dsonar.projectKey=RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
+            -Dsonar.exclusions=node_modules/**,coverage/**,build/**,dist/**,**/*.spec.ts,**/*.spec.tsx,**/*.test.ts,**/*.test.tsx,**/*.test.js
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-      # 9️⃣ Fetch Quality Gate JSON from SonarCloud
+      # 9️⃣ Fetch Quality Gate JSON (PR-aware)
       - name: Fetch Quality Gate status
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+            curl -s -u "$SONAR_TOKEN:" \
               "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react&pullRequest=${{ github.event.pull_request.number }}" \
               -o sonar_quality_gate.json
           else
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
+            curl -s -u "$SONAR_TOKEN:" \
               "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
               -o sonar_quality_gate.json
           fi
           cat sonar_quality_gate.json
 
-      # 🔟 Convert Quality Gate JSON to HTML
+      # 🔟 Build a simple HTML view of the Quality Gate
       - name: Convert Quality Gate JSON to HTML
         run: |
           echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
           echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
           echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
           jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
-            METRIC=$(echo $row | jq -r '.metricKey')
-            STATUS=$(echo $row | jq -r '.status')
-            ACTUAL=$(echo $row | jq -r '.actualValue')
-            THRESHOLD=$(echo $row | jq -r '.errorThreshold')
+            METRIC=$(echo "$row" | jq -r '.metricKey')
+            STATUS=$(echo "$row" | jq -r '.status')
+            ACTUAL=$(echo "$row" | jq -r '.actualValue')
+            THRESHOLD=$(echo "$row" | jq -r '.errorThreshold')
             echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
           done
           echo "</table></body></html>" >> sonar_quality_gate.html
 
-      # 1️⃣1️⃣ Install Python dependencies and Pandoc
-      - name: Install Python dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pandoc
-          pip install requests openpyxl python-docx pypandoc lxml
-
-      # 1️⃣2️⃣ Generate Multi-format Reports
+      # 1️⃣1️⃣ Generate multi-format Sonar measures (CSV/XLSX/DOCX/MD/RTF)
       - name: Generate SonarCloud Reports
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install requests openpyxl python-docx pypandoc lxml
           cat > sonar_report.py <<'EOF'
-          import requests, csv, os, base64
+          import requests, csv, os, base64, sys, json
           from openpyxl import Workbook
           from docx import Document
           import pypandoc
 
           token = os.getenv("SONAR_TOKEN")
           project = "RADhaigude_invoice-generator-react"
-          metrics = "bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density"
+          # Wider metric set so you see "overall project" status, not just gates
+          metrics = ",".join([
+              "bugs","vulnerabilities","code_smells",
+              "coverage","duplicated_lines_density",
+              "reliability_rating","security_rating","sqale_rating",
+              "ncloc","cognitive_complexity"
+          ])
           url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
-
           headers = {"Authorization": "Basic " + base64.b64encode(f"{token}:".encode()).decode()}
           r = requests.get(url, headers=headers)
           if r.status_code != 200:
               print("❌ API call failed:", r.status_code, r.text)
-              exit(1)
-
+              sys.exit(1)
           data = r.json()["component"]["measures"]
 
           # CSV
@@ -140,14 +156,15 @@ jobs:
               writer = csv.writer(f)
               writer.writerow(["Metric", "Value"])
               for m in data:
-                  writer.writerow([m["metric"], m["value"]])
+                  writer.writerow([m["metric"], m.get("value", "")])
 
           # XLSX
           wb = Workbook()
           ws = wb.active
+          ws.title = "Sonar Measures"
           ws.append(["Metric", "Value"])
           for m in data:
-              ws.append([m["metric"], m["value"]])
+              ws.append([m["metric"], m.get("value", "")])
           wb.save("sonar_report.xlsx")
 
           # DOCX
@@ -158,29 +175,94 @@ jobs:
           hdr[0].text, hdr[1].text = "Metric", "Value"
           for m in data:
               row = table.add_row().cells
-              row[0].text, row[1].text = m["metric"], m["value"]
+              row[0].text, row[1].text = m["metric"], m.get("value", "")
           doc.save("sonar_report.docx")
 
-          # Markdown
+          # Markdown (also used to render RTF via pandoc)
           md_content = "# SonarCloud Report\n\n| Metric | Value |\n|--------|-------|\n"
           for m in data:
-              md_content += f"| {m['metric']} | {m['value']} |\n"
+              md_content += f"| {m['metric']} | {m.get('value','')} |\n"
           with open("sonar_report.md", "w") as f:
               f.write(md_content)
 
-          # RTF (requires pandoc)
+          # RTF
           pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
-
           print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
           EOF
-          python sonar_report.py
+          python3 sonar_report.py
 
-      # 1️⃣3️⃣ Upload artifacts (all reports)
-      - name: Upload SonarCloud Reports
+      # 1️⃣2️⃣ Summarize everything in the GitHub Job Summary (tests, coverage, Sonar, Gate)
+      - name: Create Job Summary
+        if: always()
+        run: |
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+
+          # Tests
+          if [ -f jest-results.json ]; then
+            TOTAL=$(jq -r '.numTotalTests' jest-results.json 2>/dev/null || echo "NA")
+            PASSED=$(jq -r '.numPassedTests' jest-results.json 2>/dev/null || echo "NA")
+            FAILED=$(jq -r '.numFailedTests' jest-results.json 2>/dev/null || echo "NA")
+            SUCCESS=$(jq -r '.success' jest-results.json 2>/dev/null || echo "false")
+            echo "### Tests" >> $GITHUB_STEP_SUMMARY
+            echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "|------:|------:|-------:|" >> $GITHUB_STEP_SUMMARY
+            echo "| $TOTAL | $PASSED | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Coverage
+          if [ -f coverage/coverage-summary.json ]; then
+            LINES=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
+            STMT=$(jq -r '.total.statements.pct' coverage/coverage-summary.json)
+            FUNC=$(jq -r '.total.functions.pct' coverage/coverage-summary.json)
+            BRAN=$(jq -r '.total.branches.pct' coverage/coverage-summary.json)
+            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "| Lines % | Statements % | Functions % | Branches % |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------:|------------:|------------:|-----------:|" >> $GITHUB_STEP_SUMMARY
+            echo "| $LINES | $STMT | $FUNC | $BRAN |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Quality Gate
+          if [ -f sonar_quality_gate.json ]; then
+            QG=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
+            echo "### SonarCloud Quality Gate" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** \`$QG\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>Conditions</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Status | Actual | Threshold |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|--------|-------:|----------:|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.projectStatus.conditions[] | "| \(.metricKey) | \(.status) | \(.actualValue // "—") | \(.errorThreshold // "—") |"' sonar_quality_gate.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Link to project (clickable in summary)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> SonarCloud Project: https://sonarcloud.io/project/overview?id=RADhaigude_invoice-generator-react" >> $GITHUB_STEP_SUMMARY
+
+      # 1️⃣3️⃣ Enforce Quality Gate (fail build on master pushes or PRs into master)
+      - name: Fail if Quality Gate fails (protect master)
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'master')
+        run: |
+          STATUS=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
+          if [ "$STATUS" != "OK" ]; then
+            echo "Quality Gate is $STATUS. Failing the job to protect master."
+            exit 1
+          fi
+
+      # 1️⃣4️⃣ Upload artifacts (coverage, Sonar JSON/HTML, and all reports)
+      - name: Upload CI Reports
         uses: actions/upload-artifact@v4
         with:
-          name: sonarcloud-reports
+          name: sonarcloud-and-ci-reports
           path: |
+            jest-results.json
+            coverage/lcov.info
+            coverage/coverage-summary.json
             sonar_quality_gate.json
             sonar_quality_gate.html
             sonar_report.csv
@@ -188,4 +270,7 @@ jobs:
             sonar_report.docx
             sonar_report.md
             sonar_report_quality.rtf
+            build/**
+          retention-days: 7
+
 
