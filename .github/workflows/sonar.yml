@@ -104,9 +104,11 @@ jobs:
           done
           echo "</table></body></html>" >> sonar_quality_gate.html
 
-      # 1️⃣1️⃣ Install Python dependencies for reports
+      # 1️⃣1️⃣ Install Python dependencies and Pandoc
       - name: Install Python dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
           pip install requests openpyxl python-docx pypandoc lxml
 
       # 1️⃣2️⃣ Generate Multi-format Reports
@@ -166,7 +168,7 @@ jobs:
           with open("sonar_report.md", "w") as f:
               f.write(md_content)
 
-          # RTF
+          # RTF (requires pandoc)
           pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
 
           print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
