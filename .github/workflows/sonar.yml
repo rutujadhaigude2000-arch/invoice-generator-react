@@ -155,13 +155,10 @@ jobs:
           from openpyxl import Workbook
           from docx import Document
           import pypandoc
-
-          # Ensure Pandoc is available
           try:
               pypandoc.get_pandoc_version()
           except OSError:
               pypandoc.download_pandoc()
-
           token = os.getenv("SONAR_TOKEN")
           project = "RADhaigude_invoice-generator-react"
           metrics = ",".join([
@@ -177,14 +174,12 @@ jobs:
               print("❌ API call failed:", r.status_code, r.text)
               sys.exit(1)
           data = r.json()["component"]["measures"]
-
           # CSV
           with open("sonar_report.csv", "w", newline="") as f:
               writer = csv.writer(f)
               writer.writerow(["Metric", "Value"])
               for m in data:
                   writer.writerow([m["metric"], m.get("value", "")])
-
           # XLSX
           wb = Workbook()
           ws = wb.active
@@ -193,7 +188,6 @@ jobs:
           for m in data:
               ws.append([m["metric"], m.get("value", "")])
           wb.save("sonar_report.xlsx")
-
           # DOCX
           doc = Document()
           doc.add_heading("SonarCloud Report", 0)
@@ -204,8 +198,27 @@ jobs:
               row = table.add_row().cells
               row[0].text, row[1].text = m["metric"], m.get("value", "")
           doc.save("sonar_report.docx")
-
           # Markdown
           md_content = "# SonarCloud Report\n\n| Metric | Value |\n|--------|-------|\n"
           for m in data:
-              md_content += f"| {m['metric']} | {m.get('value
+              md_content += f"| {m['metric']} | {m.get('value','')} |\n"
+          with open("sonar_report.md", "w") as f:
+              f.write(md_content)
+          # RTF
+          pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
+          print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
+          EOF
+          python3 sonar_report.py
+
+      # 1️⃣3️⃣ Debug: list all generated files
+      - name: Debug generated files
+        run: |
+          echo "Listing files before uploading..."
+          ls -R reports/sonar/
+          ls -l jest-results.json
+          ls -R coverage/
+          ls -R build/
+          ls -l sonar_quality_gate.json sonar_quality_gate.html
+          ls -l sonar_report.*
+
+      # 1️⃣4
