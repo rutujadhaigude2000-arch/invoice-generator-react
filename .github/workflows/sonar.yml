@@ -7,7 +7,7 @@ on:
       - master
   pull_request:
     branches:
-      - master   # Only trigger PR checks into master (adjust if needed)
+      - master
 
 jobs:
   sonarcloud:
@@ -41,7 +41,7 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --coverage --watchAll=false --passWithNoTests || true
 
-      # 6️⃣ Build project (React + Node 18 fix)
+      # 6️⃣ Build project
       - name: Build project
         run: |
           CI=false npm run build --if-present
@@ -75,41 +75,39 @@ jobs:
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
 
-      # 9️⃣ Fetch Quality Gate JSON from SonarCloud
-      - name: Fetch Quality Gate status
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react&pullRequest=${{ github.event.pull_request.number }}" \
-              -o sonar_quality_gate.json
-          else
-            curl -s -u ${{ secrets.SONAR_TOKEN }}: \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
-              -o sonar_quality_gate.json
-          fi
-          cat sonar_quality_gate.json
+      # 9️⃣ Install Python for report generation
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-      # 🔟 Convert Quality Gate JSON to HTML
-      - name: Convert Quality Gate JSON to HTML
+      # 🔟 Generate SonarCloud Report (CSV)
+      - name: Generate SonarCloud Report
         run: |
-          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
-          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
-          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
-          jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
-            METRIC=$(echo $row | jq -r '.metricKey')
-            STATUS=$(echo $row | jq -r '.status')
-            ACTUAL=$(echo $row | jq -r '.actualValue')
-            THRESHOLD=$(echo $row | jq -r '.errorThreshold')
-            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
-          done
-          echo "</table></body></html>" >> sonar_quality_gate.html
+          pip install requests
+          cat > sonar_report.py <<'EOF'
+          import requests, csv, os
 
-      # 1️⃣1️⃣ Upload artifacts (JSON + HTML)
-      - name: Upload Quality Gate artifacts
+          token = os.getenv("SONAR_TOKEN")
+          project = "RADhaigude_invoice-generator-react"
+          url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density"
+
+          r = requests.get(url, auth=(token, ""))
+          data = r.json()["component"]["measures"]
+
+          with open("sonar_report.csv", "w", newline="") as f:
+              writer = csv.writer(f)
+              writer.writerow(["Metric", "Value"])
+              for m in data:
+                  writer.writerow([m["metric"], m["value"]])
+          print("✅ Report saved as sonar_report.csv")
+          EOF
+          python sonar_report.py
+
+      # 1️⃣1️⃣ Upload SonarCloud Report artifact
+      - name: Upload SonarCloud Report
         uses: actions/upload-artifact@v4
         with:
-          name: sonar-quality-gate
-          path: |
-            sonar_quality_gate.json
-            sonar_quality_gate.html
+          name: sonar-report
+          path: sonar_report.csv
 
