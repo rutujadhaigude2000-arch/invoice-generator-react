@@ -3,8 +3,6 @@ name: CI / SonarCloud Scan
 on:
   push:
     branches: [ dev, master ]
-  pull_request:
-    branches: [ master ]
 
 permissions:
   contents: read
@@ -62,7 +60,9 @@ jobs:
       - name: Generate test coverage report
         run: |
           mkdir -p reports/sonar/coverage
-          cp -r coverage/lcov-report/* reports/sonar/coverage/ 2>/dev/null || true
+          if [ -d coverage/lcov-report ]; then
+            cp -r coverage/lcov-report/* reports/sonar/coverage/
+          fi
           echo "# Test Coverage Summary" > reports/sonar/coverage/SUMMARY.md
           echo "Generated on: $(date)" >> reports/sonar/coverage/SUMMARY.md
           echo "## Coverage Metrics" >> reports/sonar/coverage/SUMMARY.md
@@ -89,7 +89,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=RADhaigude_invoice-generator-react
+            -Dsonar.projectKey=radhaigude_RADhaigude_invoice-generator-react
             -Dsonar.organization=radhaigude
             -Dsonar.sources=.
             -Dsonar.exclusions=node_modules/**,coverage/**,build/**,dist/**,**/*.spec.ts,**/*.spec.tsx,**/*.test.ts,**/*.test.tsx,**/*.test.js
@@ -101,8 +101,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           curl -s -u "$SONAR_TOKEN:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=RADhaigude_invoice-generator-react" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=radhaigude_RADhaigude_invoice-generator-react" \
             -o sonar_quality_gate.json
+          echo "✅ Fetched Quality Gate JSON"
           cat sonar_quality_gate.json
 
       # 1️⃣1️⃣ Convert Quality Gate JSON to HTML
@@ -129,109 +130,74 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install requests openpyxl python-docx pypandoc lxml
-          cat > sonar_report.py <<'EOF'
-          import requests, csv, os, base64, sys
-          from openpyxl import Workbook
-          from docx import Document
-          import pypandoc
-          try:
-              pypandoc.get_pandoc_version()
-          except OSError:
-              pypandoc.download_pandoc()
-          token = os.getenv("SONAR_TOKEN")
-          project = "RADhaigude_invoice-generator-react"
-          metrics = ",".join([
-              "bugs","vulnerabilities","code_smells",
-              "coverage","duplicated_lines_density",
-              "reliability_rating","security_rating","sqale_rating",
-              "ncloc","cognitive_complexity"
-          ])
-          url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
-          headers = {"Authorization": "Basic " + base64.b64encode(f"{token}:".encode()).decode()}
-          r = requests.get(url, headers=headers)
-          if r.status_code != 200:
-              print("❌ API call failed:", r.status_code, r.text)
-              sys.exit(1)
-          data = r.json()["component"]["measures"]
-          # CSV
-          with open("sonar_report.csv", "w", newline="") as f:
-              writer = csv.writer(f)
-              writer.writerow(["Metric", "Value"])
-              for m in data:
-                  writer.writerow([m["metric"], m.get("value", "")])
-          # XLSX
-          wb = Workbook()
-          ws = wb.active
-          ws.title = "Sonar Measures"
-          ws.append(["Metric", "Value"])
-          for m in data:
-              ws.append([m["metric"], m.get("value", "")])
-          wb.save("sonar_report.xlsx")
-          # DOCX
-          doc = Document()
-          doc.add_heading("SonarCloud Report", 0)
-          table = doc.add_table(rows=1, cols=2)
-          hdr = table.rows[0].cells
-          hdr[0].text, hdr[1].text = "Metric", "Value"
-          for m in data:
-              row = table.add_row().cells
-              row[0].text, row[1].text = m["metric"], m.get("value", "")
-          doc.save("sonar_report.docx")
-          # Markdown
-          md_content = "# SonarCloud Report\n\n| Metric | Value |\n|--------|-------|\n"
-          for m in data:
-              md_content += f"| {m['metric']} | {m.get('value','')} |\n"
-          with open("sonar_report.md", "w") as f:
-              f.write(md_content)
-          # RTF
-          pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
-          print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
-          EOF
-          python3 sonar_report.py || echo "⚠️ Report generation failed, but continuing..."
+          python3 <<'EOF'
+import requests, csv, os, base64, sys
+from openpyxl import Workbook
+from docx import Document
+import pypandoc
 
-      # 1️⃣3️⃣ Create Job Summary
-      - name: Create Job Summary
-        if: always()
-        run: |
-          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
-          if [ -f jest-results.json ]; then
-            TOTAL=$(jq -r '.numTotalTests' jest-results.json 2>/dev/null || echo "NA")
-            PASSED=$(jq -r '.numPassedTests' jest-results.json 2>/dev/null || echo "NA")
-            FAILED=$(jq -r '.numFailedTests' jest-results.json 2>/dev/null || echo "NA")
-            echo "### Tests" >> $GITHUB_STEP_SUMMARY
-            echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "|------:|------:|-------:|" >> $GITHUB_STEP_SUMMARY
-            echo "| $TOTAL | $PASSED | $FAILED |" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -f coverage/coverage-summary.json ]; then
-            LINES=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
-            STMT=$(jq -r '.total.statements.pct' coverage/coverage-summary.json)
-            FUNC=$(jq -r '.total.functions.pct' coverage/coverage-summary.json)
-            BRAN=$(jq -r '.total.branches.pct' coverage/coverage-summary.json)
-            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
-            echo "| Lines % | Statements % | Functions % | Branches % |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------:|------------:|------------:|-----------:|" >> $GITHUB_STEP_SUMMARY
-            echo "| $LINES | $STMT | $FUNC | $BRAN |" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -f sonar_quality_gate.json ]; then
-            QG=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
-            echo "### SonarCloud Quality Gate" >> $GITHUB_STEP_SUMMARY
-            echo "- **Status:** \`$QG\`" >> $GITHUB_STEP_SUMMARY
-          fi
+try:
+    pypandoc.get_pandoc_version()
+except OSError:
+    pypandoc.download_pandoc()
 
-      # 1️⃣4️⃣ Enforce Quality Gate (master only)
-      - name: Fail if Quality Gate fails (protect master)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          if [ -f sonar_quality_gate.json ]; then
-            STATUS=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
-            if [ "$STATUS" != "OK" ]; then
-              echo "❌ Quality Gate is $STATUS. Failing the job to protect master."
-              exit 1
-            fi
-          fi
+token = os.getenv("SONAR_TOKEN")
+project = "radhaigude_RADhaigude_invoice-generator-react"
+metrics = ",".join([
+    "bugs","vulnerabilities","code_smells",
+    "coverage","duplicated_lines_density",
+    "reliability_rating","security_rating","sqale_rating",
+    "ncloc","cognitive_complexity"
+])
+url = f"https://sonarcloud.io/api/measures/component?component={project}&metricKeys={metrics}"
+headers = {"Authorization": "Basic " + base64.b64encode(f"{token}:".encode()).decode()}
+r = requests.get(url, headers=headers)
+print(r.json())  # <-- Debug API output
+if r.status_code != 200 or "component" not in r.json():
+    print("❌ API call failed or no measures found")
+    sys.exit(1)
+data = r.json()["component"]["measures"]
 
-      # 1️⃣5️⃣ Upload comprehensive reports
+# CSV
+with open("sonar_report.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Metric", "Value"])
+    for m in data:
+        writer.writerow([m["metric"], m.get("value","")])
+
+# XLSX
+wb = Workbook()
+ws = wb.active
+ws.title = "Sonar Measures"
+ws.append(["Metric","Value"])
+for m in data:
+    ws.append([m["metric"], m.get("value","")])
+wb.save("sonar_report.xlsx")
+
+# DOCX
+doc = Document()
+doc.add_heading("SonarCloud Report",0)
+table = doc.add_table(rows=1,cols=2)
+hdr = table.rows[0].cells
+hdr[0].text,hdr[1].text = "Metric","Value"
+for m in data:
+    row = table.add_row().cells
+    row[0].text,row[1].text = m["metric"], m.get("value","")
+doc.save("sonar_report.docx")
+
+# Markdown
+md_content = "# SonarCloud Report\n\n| Metric | Value |\n|-------|------|\n"
+for m in data:
+    md_content += f"| {m['metric']} | {m.get('value','')} |\n"
+with open("sonar_report.md","w") as f:
+    f.write(md_content)
+
+# RTF
+pypandoc.convert_text(md_content,'rtf',format='md',outputfile='sonar_report_quality.rtf',extra_args=['--standalone'])
+print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
+EOF
+
+      # 1️⃣3️⃣ Upload comprehensive reports
       - name: Upload comprehensive reports
         if: always()
         uses: actions/upload-artifact@v4
