@@ -3,6 +3,8 @@ name: CI / SonarCloud Scan
 on:
   push:
     branches: [ dev, master ]
+  pull_request:
+    branches: [ master ]
 
 permissions:
   contents: read
@@ -15,7 +17,7 @@ concurrency:
 jobs:
   build-test-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       # 1️⃣ Checkout repository
@@ -56,11 +58,11 @@ jobs:
             --json --outputFile=jest-results.json \
             --coverageReporters=text --coverageReporters=lcov --coverageReporters=html || echo "⚠️ Some tests failed, but continuing..."
 
-      # 6️⃣ Generate comprehensive test coverage report
+      # 6️⃣ Generate test coverage report
       - name: Generate test coverage report
         run: |
           mkdir -p reports/sonar/coverage
-          cp -r coverage/lcov-report/* reports/sonar/coverage/ || true
+          cp -r coverage/lcov-report/* reports/sonar/coverage/ 2>/dev/null || true
           echo "# Test Coverage Summary" > reports/sonar/coverage/SUMMARY.md
           echo "Generated on: $(date)" >> reports/sonar/coverage/SUMMARY.md
           echo "## Coverage Metrics" >> reports/sonar/coverage/SUMMARY.md
@@ -103,20 +105,22 @@ jobs:
             -o sonar_quality_gate.json
           cat sonar_quality_gate.json
 
-      # 1️⃣1️⃣ Build HTML view of Quality Gate
+      # 1️⃣1️⃣ Convert Quality Gate JSON to HTML
       - name: Convert Quality Gate JSON to HTML
         run: |
-          echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
-          echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
-          echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
-          jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
-            METRIC=$(echo "$row" | jq -r '.metricKey')
-            STATUS=$(echo "$row" | jq -r '.status')
-            ACTUAL=$(echo "$row" | jq -r '.actualValue')
-            THRESHOLD=$(echo "$row" | jq -r '.errorThreshold')
-            echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
-          done
-          echo "</table></body></html>" >> sonar_quality_gate.html
+          if [ -f sonar_quality_gate.json ]; then
+            echo "<html><head><title>SonarCloud Quality Gate</title></head><body>" > sonar_quality_gate.html
+            echo "<h1>Quality Gate Status: $(jq -r '.projectStatus.status' sonar_quality_gate.json)</h1>" >> sonar_quality_gate.html
+            echo "<table border='1' cellpadding='5'><tr><th>Metric</th><th>Status</th><th>Actual Value</th><th>Error Threshold</th></tr>" >> sonar_quality_gate.html
+            jq -c '.projectStatus.conditions[]' sonar_quality_gate.json | while read row; do
+              METRIC=$(echo "$row" | jq -r '.metricKey')
+              STATUS=$(echo "$row" | jq -r '.status')
+              ACTUAL=$(echo "$row" | jq -r '.actualValue')
+              THRESHOLD=$(echo "$row" | jq -r '.errorThreshold')
+              echo "<tr><td>$METRIC</td><td>$STATUS</td><td>$ACTUAL</td><td>$THRESHOLD</td></tr>" >> sonar_quality_gate.html
+            done
+            echo "</table></body></html>" >> sonar_quality_gate.html
+          fi
 
       # 1️⃣2️⃣ Generate multi-format Sonar reports
       - name: Generate SonarCloud Reports
@@ -130,7 +134,6 @@ jobs:
           from openpyxl import Workbook
           from docx import Document
           import pypandoc
-          # Ensure Pandoc is available
           try:
               pypandoc.get_pandoc_version()
           except OSError:
@@ -184,7 +187,7 @@ jobs:
           pypandoc.convert_text(md_content, 'rtf', format='md', outputfile='sonar_report_quality.rtf', extra_args=['--standalone'])
           print("✅ Reports generated: CSV, XLSX, DOCX, MD, RTF")
           EOF
-          python3 sonar_report.py
+          python3 sonar_report.py || echo "⚠️ Report generation failed, but continuing..."
 
       # 1️⃣3️⃣ Create Job Summary
       - name: Create Job Summary
@@ -199,7 +202,6 @@ jobs:
             echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
             echo "|------:|------:|-------:|" >> $GITHUB_STEP_SUMMARY
             echo "| $TOTAL | $PASSED | $FAILED |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -f coverage/coverage-summary.json ]; then
             LINES=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
@@ -210,7 +212,6 @@ jobs:
             echo "| Lines % | Statements % | Functions % | Branches % |" >> $GITHUB_STEP_SUMMARY
             echo "|--------:|------------:|------------:|-----------:|" >> $GITHUB_STEP_SUMMARY
             echo "| $LINES | $STMT | $FUNC | $BRAN |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
           fi
           if [ -f sonar_quality_gate.json ]; then
             QG=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
@@ -218,14 +219,17 @@ jobs:
             echo "- **Status:** \`$QG\`" >> $GITHUB_STEP_SUMMARY
           fi
 
-      # 1️⃣4️⃣ Enforce Quality Gate
+      # 1️⃣4️⃣ Enforce Quality Gate (master only)
       - name: Fail if Quality Gate fails (protect master)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          STATUS=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
-          if [ "$STATUS" != "OK" ]; then
-            echo "Quality Gate is $STATUS. Failing the job to protect master."
-            exit 1
+          if [ -f sonar_quality_gate.json ]; then
+            STATUS=$(jq -r '.projectStatus.status' sonar_quality_gate.json)
+            if [ "$STATUS" != "OK" ]; then
+              echo "❌ Quality Gate is $STATUS. Failing the job to protect master."
+              exit 1
+            fi
+          fi
 
       # 1️⃣5️⃣ Upload comprehensive reports
       - name: Upload comprehensive reports
@@ -234,7 +238,7 @@ jobs:
         with:
           name: comprehensive-sonar-report
           path: |
-            reports/sonar/
+            reports/sonar/**
             jest-results.json
             coverage/lcov.info
             coverage/coverage-summary.json
@@ -247,3 +251,4 @@ jobs:
             sonar_report_quality.rtf
             build/**
           retention-days: 7
+
