@@ -48,11 +48,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 5️⃣ Run tests with coverage (Jest) – always run all tests
+      # 5️⃣ Run tests with coverage (with canvas mock fix)
       - name: Run tests with coverage
         run: |
-          npm test -- --coverage --watchAll=false --passWithNoTests --bail=0 \
-            --json --outputFile=jest-results.json || true
+          npm install --save-dev jest-canvas-mock
+          echo "import 'jest-canvas-mock';" > src/setupTests.js
+
+          # Run tests with coverage and save results
+          npx jest --coverage --watchAll=false --passWithNoTests --bail=0 \
+            --json --outputFile=jest-results.json \
+            --coverageReporters=text --coverageReporters=lcov || echo "⚠️ Some tests failed, but continuing..."
 
       # 6️⃣ Build project (non-blocking CI var for CRA builds)
       - name: Build project
